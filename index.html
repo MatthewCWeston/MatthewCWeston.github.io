@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SPACEWAR!</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    background: #0a0a0d; color: #ddd;
+    max-width: 760px; margin: 1.5rem auto; padding: 0 1rem;
+    line-height: 1.45;
+  }
+  h1 { font-weight: 400; letter-spacing: 0.18em; margin: 0 0 0.5rem; }
+  .toolbar { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
+  label { display: flex; align-items: center; gap: 0.5rem; }
+  select, button {
+    font: inherit; font-size: 0.9rem; padding: 0.35rem 0.75rem;
+    background: #1a1a1f; color: #ddd; border: 1px solid #333; border-radius: 3px;
+    cursor: pointer;
+  }
+  select:hover, button:hover { border-color: #555; }
+  canvas {
+    display: block; background: #000; border: 1px solid #222;
+    image-rendering: crisp-edges;
+  }
+  #status { margin-top: 0.5rem; min-height: 1.3em; opacity: 0.75; font-size: 0.9rem; }
+  details { margin-top: 1rem; }
+  details summary { cursor: pointer; opacity: 0.55; }
+  details summary:hover { opacity: 0.9; }
+  .keys { display: grid; grid-template-columns: auto auto; gap: 0.1rem 1.5rem; opacity: 0.75; font-size: 0.85rem; margin-top: 0.5rem; }
+  .keys b { color: #aaa; font-weight: 400; }
+</style>
+<!-- onnxruntime-web bundle (UMD): exposes the global `ort`. -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+</head>
+<body>
+<h1>SPACEWAR!</h1>
+
+<div class="toolbar">
+  <label>
+    Mode:
+    <select id="mode">
+      <option value="cvc">Computer vs Computer</option>
+      <option value="hvc">Human vs Computer</option>
+      <option value="hotseat">Hotseat (2 players)</option>
+    </select>
+  </label>
+  <button id="restart">Restart</button>
+</div>
+
+<canvas id="game" width="600" height="600"></canvas>
+<p id="status"></p>
+
+<details>
+<summary>controls</summary>
+<div class="keys">
+  <b>Player 1</b>          <b>Player 2</b>
+  <span>↑ thrust</span>     <span>W thrust</span>
+  <span>← → turn</span>     <span>A D turn</span>
+  <span>↓ shoot</span>      <span>S shoot</span>
+  <span>Space hyperspace</span>  <span>Q hyperspace</span>
+</div>
+</details>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
