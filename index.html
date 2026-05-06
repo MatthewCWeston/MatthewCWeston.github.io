@@ -2,67 +2,160 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>SPACEWAR!</title>
+<title>RLlib model in the browser</title>
 <style>
-  :root { color-scheme: dark; }
-  body {
-    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-    background: #0a0a0d; color: #ddd;
-    max-width: 760px; margin: 1.5rem auto; padding: 0 1rem;
-    line-height: 1.45;
-  }
-  h1 { font-weight: 400; letter-spacing: 0.18em; margin: 0 0 0.5rem; }
-  .toolbar { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
-  label { display: flex; align-items: center; gap: 0.5rem; }
-  select, button {
-    font: inherit; font-size: 0.9rem; padding: 0.35rem 0.75rem;
-    background: #1a1a1f; color: #ddd; border: 1px solid #333; border-radius: 3px;
-    cursor: pointer;
-  }
-  select:hover, button:hover { border-color: #555; }
-  canvas {
-    display: block; background: #000; border: 1px solid #222;
-    image-rendering: crisp-edges;
-  }
-  #status { margin-top: 0.5rem; min-height: 1.3em; opacity: 0.75; font-size: 0.9rem; }
-  details { margin-top: 1rem; }
-  details summary { cursor: pointer; opacity: 0.55; }
-  details summary:hover { opacity: 0.9; }
-  .keys { display: grid; grid-template-columns: auto auto; gap: 0.1rem 1.5rem; opacity: 0.75; font-size: 0.85rem; margin-top: 0.5rem; }
-  .keys b { color: #aaa; font-weight: 400; }
+  body   { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.45; }
+  pre    { background: #f3f3f3; padding: 1rem; overflow-x: auto; border-radius: 6px; font-variant-numeric: tabular-nums; }
+  button { padding: .55rem 1.1rem; font-size: 1rem; cursor: pointer; }
+  code   { background: #eee; padding: 0 .25rem; border-radius: 3px; }
 </style>
-<!-- onnxruntime-web bundle (UMD): exposes the global `ort`. -->
+<!-- IIFE bundle: attaches a global `ort`. Loads in <head> so it's ready when our inline script runs. -->
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
 </head>
 <body>
-<h1>SPACEWAR!</h1>
+<h1>PFSP model — browser inference</h1>
+<p>Loads <code>model.fp16.onnx</code> through onnxruntime-web (WASM backend) and benchmarks 50 forward passes.</p>
+<button id="run">Benchmark (50 runs)</button>
+<pre id="out">…click the button…</pre>
 
-<div class="toolbar">
-  <label>
-    Mode:
-    <select id="mode">
-      <option value="cvc">Computer vs Computer</option>
-      <option value="hvc">Human vs Computer</option>
-      <option value="hotseat">Hotseat (2 players)</option>
-    </select>
-  </label>
-  <button id="restart">Restart</button>
-</div>
+<script>
+ort.env.logLevel        = 'warning';   // bump to 'verbose' if you need to debug the runtime
+ort.env.wasm.numThreads = 1;           // GitHub Pages can't serve COOP/COEP for SharedArrayBuffer
 
-<canvas id="game" width="600" height="600"></canvas>
-<p id="status"></p>
+// ---------------------------------------------------------------------------
+// Space metadata. These values also live inside model.fp16.onnx as
+// metadata_props (input_keys / obs_meta / action_nvec), but ort-web doesn't
+// expose a clean public API for reading them, so keep this block in sync with
+// the export notebook by hand.
+// ---------------------------------------------------------------------------
+const META = {
+  self:              { kind: 'box',      dim: 16 },
+  opponent:          { kind: 'box',      dim: 22 },
+  missiles_friendly: { kind: 'repeated', max_len: 32, child_dim: 9 },
+  missiles_hostile:  { kind: 'repeated', max_len: 32, child_dim: 9 },
+};
+const ACTION_NVEC = [3, 2, 2, 2];   // <-- replace with env.action_spaces[0].nvec
 
-<details>
-<summary>controls</summary>
-<div class="keys">
-  <b>Player 1</b>          <b>Player 2</b>
-  <span>↑ thrust</span>     <span>W thrust</span>
-  <span>← → turn</span>     <span>A D turn</span>
-  <span>↓ shoot</span>      <span>S shoot</span>
-  <span>Space hyperspace</span>  <span>Q hyperspace</span>
-</div>
-</details>
+// Mirrors RepeatedCustom.encode_obs:
+//   [ mask (max_len) | obs_0 (child_dim) | obs_1 (child_dim) | ... | zeros ]
+function encodeRepeated(items, { max_len, child_dim }) {
+  const out = new Float32Array(max_len + max_len * child_dim);
+  for (let i = 0; i < items.length; i++) {
+    out[i] = 1.0;
+    for (let j = 0; j < child_dim; j++) {
+      out[max_len + i * child_dim + j] = items[i][j];
+    }
+  }
+  return out;
+}
 
-<script type="module" src="./main.js"></script>
+// Deterministic per-axis action — argmax of each contiguous logit slice.
+function perAxisArgmax(logits, nvec) {
+  const out = [];
+  let p = 0;
+  for (const n of nvec) {
+    let bi = 0, bv = logits[p];
+    for (let i = 1; i < n; i++) if (logits[p + i] > bv) { bv = logits[p + i]; bi = i; }
+    out.push(bi);
+    p += n;
+  }
+  return out;
+}
+
+// Build a fresh feeds object every call. Re-using the same ort.Tensor instances
+// across runs lets the runtime skip work and would understate inference time.
+function makeFeeds() {
+  const self_obs = new Float32Array([
+    -0.3536,  0.3536,  0.0,    0.0,    0.3536, -0.3536, 1.0, 0.0,
+     1.0,     1.0,     0.0,    0.0,    0.0,    0.0,     0.5, 0.0,
+  ]);
+  const opponent_obs = new Float32Array([
+    -0.7071,  0.7071,  0.0,    0.0,    0.7071,  0.7071, 1.0, 0.0,
+     1.0,     1.0,     0.0,    0.0,    0.0,    0.0,    0.5,  0.0,
+     0.3536, -0.3536, -0.7071, 0.7071, 1.0,     0.0,
+  ]);
+  const friendly = encodeRepeated([], META.missiles_friendly);
+  const hostile  = encodeRepeated([], META.missiles_hostile);
+
+  return {
+    self:              new ort.Tensor('float32', self_obs,     [1, META.self.dim]),
+    opponent:          new ort.Tensor('float32', opponent_obs, [1, META.opponent.dim]),
+    missiles_friendly: new ort.Tensor('float32', friendly,     [1, friendly.length]),
+    missiles_hostile:  new ort.Tensor('float32', hostile,      [1, hostile.length]),
+  };
+}
+
+// Single, lazily-created session.
+let session = null;
+async function getSession() {
+  if (!session) {
+    session = await ort.InferenceSession.create('./model.fp16.onnx', {
+      executionProviders:     ['wasm'],
+      graphOptimizationLevel: 'all',
+    });
+  }
+  return session;
+}
+
+function summarize(times) {
+  const sorted = [...times].sort((a, b) => a - b);
+  const N      = times.length;
+  const sum    = times.reduce((a, b) => a + b, 0);
+  return {
+    n:      N,
+    total:  sum,
+    min:    sorted[0],
+    median: sorted[Math.floor(N / 2)],
+    mean:   sum / N,
+    p95:    sorted[Math.min(N - 1, Math.floor(N * 0.95))],
+    max:    sorted[N - 1],
+  };
+}
+
+document.getElementById('run').onclick = async () => {
+  const out    = document.getElementById('out');
+  const N      = 50;
+  const WARMUP = 5;
+
+  out.textContent = 'Loading model…';
+  try {
+    const sess = await getSession();
+
+    // Warmup — first calls include WASM kernel compilation, so they're outliers.
+    out.textContent = `Warming up (${WARMUP} runs)…`;
+    for (let i = 0; i < WARMUP; i++) await sess.run(makeFeeds());
+
+    out.textContent = `Benchmarking (${N} runs)…`;
+    const times = new Float64Array(N);
+    let lastResult = null;
+    for (let i = 0; i < N; i++) {
+      const feeds = makeFeeds();
+      const t0    = performance.now();
+      lastResult  = await sess.run(feeds);
+      times[i]    = performance.now() - t0;
+    }
+
+    const s      = summarize(Array.from(times));
+    const logits = Array.from(lastResult.logits.data);
+    const action = perAxisArgmax(logits, ACTION_NVEC);
+
+    out.textContent =
+      `Benchmark — ${s.n} runs (${WARMUP} warmup) · WASM · 1 thread\n` +
+      `  min:    ${s.min.toFixed(3)} ms\n` +
+      `  median: ${s.median.toFixed(3)} ms\n` +
+      `  mean:   ${s.mean.toFixed(3)} ms\n` +
+      `  p95:    ${s.p95.toFixed(3)} ms\n` +
+      `  max:    ${s.max.toFixed(3)} ms\n` +
+      `  total:  ${s.total.toFixed(1)} ms  (${(1000 * s.n / s.total).toFixed(0)} inf/s)\n` +
+      `\n` +
+      `Sample output (last run):\n` +
+      `  logits:   [${logits.map(x => x.toFixed(3)).join(', ')}]\n` +
+      `  per-axis: [${action.join(', ')}]   (ACTION_NVEC = [${ACTION_NVEC.join(', ')}])`;
+  } catch (e) {
+    out.textContent = 'Error: ' + (e.message || e);
+    throw e;
+  }
+};
+</script>
 </body>
 </html>
