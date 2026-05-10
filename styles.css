@@ -1,0 +1,513 @@
+:root {
+  --bg:               #050605;
+  --bg-panel:        #0b0d0b;
+  --phosphor:        #ffb000;
+  --phosphor-dim:    #6a4a00;
+  --phosphor-bright: #ffd060;
+  --scan:            rgba(255, 176, 0, 0.04);
+  --p1:              #4ad8ff;
+  --p2:              #ff8a3d;
+  --danger:          #ff4040;
+  --ok:              #50ff80;
+  /* Shared content width for the HUD bars and the warp icons row, so the
+     FUEL/WARP labels line up regardless of icon count. */
+  --hud-content-w:   132px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--phosphor);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+/* CRT scanlines + vignette */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom, transparent 0, transparent 2px,
+    var(--scan) 2px, var(--scan) 3px);
+  z-index: 999;
+  mix-blend-mode: screen;
+}
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+  z-index: 998;
+}
+
+/* ============================================================
+ * App layout — header on top, square stage filling the rest
+ * ============================================================ */
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0.4rem 0.6rem 0.5rem;
+}
+
+.app-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.title-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.title-block h1 {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.6rem, 4vh, 2.4rem);
+  margin: 0;
+  color: var(--phosphor-bright);
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 6px rgba(255,176,0,0.6),
+               0 0 18px rgba(255,176,0,0.4),
+               0 0 36px rgba(255,144,0,0.22);
+}
+.subhead {
+  font-size: clamp(0.55rem, 1vh, 0.7rem);
+  letter-spacing: 0.32em;
+  color: var(--phosphor-dim);
+  margin-top: 0.15rem;
+}
+
+.stage-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0;
+}
+
+.stage {
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 100%;
+  position: relative;
+  background: #000;
+  border: 1px solid var(--phosphor-dim);
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* ============================================================
+ * Control bar (always visible, top of page)
+ * ============================================================ */
+
+.control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.78rem;
+}
+
+/* Segmented control */
+.seg {
+  display: flex;
+  border: 1px solid var(--phosphor-dim);
+  background: var(--bg-panel);
+}
+.seg-btn {
+  border: none;
+  border-right: 1px solid var(--phosphor-dim);
+  padding: 0.32rem 0.7rem;
+  background: transparent;
+  color: var(--phosphor-dim);
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, text-shadow 0.15s;
+}
+.seg-btn:last-child { border-right: none; }
+.seg-btn:hover:not(.active) {
+  color: var(--phosphor);
+  background: rgba(255, 176, 0, 0.05);
+}
+.seg-btn.active {
+  background: rgba(255, 176, 0, 0.13);
+  color: var(--phosphor-bright);
+  text-shadow: 0 0 5px rgba(255, 176, 0, 0.55);
+}
+.seg-btn:focus { outline: none; }
+
+/* Slider groups */
+.ctl-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.ctl-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--phosphor-dim);
+  user-select: none;
+}
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 4px;
+  background: var(--phosphor-dim);
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px; height: 12px;
+  background: var(--phosphor);
+  border: 1px solid var(--phosphor-bright);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(255, 176, 0, 0.6);
+}
+input[type=range]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  background: var(--phosphor);
+  border: 1px solid var(--phosphor-bright);
+  cursor: pointer;
+  border-radius: 0;
+}
+.readout {
+  font-variant-numeric: tabular-nums;
+  color: var(--phosphor-bright);
+  min-width: 1.4em;
+  text-align: right;
+  font-size: 0.78rem;
+}
+
+/* The mini variant — the FPS adjuster.  Smaller, dimmer, lowercase. */
+.ctl-mini { opacity: 0.62; gap: 0.3rem; transition: opacity 0.15s; }
+.ctl-mini:hover { opacity: 0.95; }
+.ctl-mini .ctl-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+}
+.ctl-mini input[type=range] {
+  width: 50px;
+  height: 3px;
+}
+.ctl-mini input[type=range]::-webkit-slider-thumb {
+  width: 9px; height: 9px;
+  box-shadow: 0 0 3px rgba(255, 176, 0, 0.4);
+}
+.ctl-mini input[type=range]::-moz-range-thumb {
+  width: 9px; height: 9px;
+}
+.ctl-mini .readout {
+  font-size: 0.7rem;
+  color: var(--phosphor);
+  min-width: 1.2em;
+}
+
+/* Toggles */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: var(--phosphor);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Custom checkbox — phosphor square that fills when checked. */
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  border: 1px solid var(--phosphor-dim);
+  background: var(--bg-panel);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+input[type="checkbox"]:hover { border-color: var(--phosphor); }
+input[type="checkbox"]:checked {
+  background: var(--phosphor);
+  border-color: var(--phosphor);
+  box-shadow: 0 0 6px rgba(255, 176, 0, 0.5);
+}
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: -1px;
+  width: 3px; height: 7px;
+  border: solid var(--bg);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+input[type="checkbox"]:focus-visible {
+  outline: 1px solid var(--phosphor-bright);
+  outline-offset: 1px;
+}
+
+/* ============================================================
+ * Overlays — visibility driven by  body[data-state]
+ * ============================================================ */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+body[data-state="loading"]    .overlay-loading,
+body[data-state="paused"]     .overlay-paused,
+body[data-state="ready"]      .overlay-status,
+body[data-state="match-over"] .overlay-status {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.big-msg {
+  font-family: 'VT323', monospace;
+  font-size: clamp(2rem, 5vw, 3rem);
+  color: var(--phosphor-bright);
+  text-shadow: 0 0 12px rgba(255, 176, 0, 0.6);
+  line-height: 1;
+}
+.sub-msg {
+  font-size: 0.85rem;
+  letter-spacing: 0.18em;
+  color: var(--phosphor);
+  margin-top: 0.3rem;
+}
+.sub-msg:empty { display: none; }
+
+.hidden { display: none !important; }
+
+kbd {
+  font-family: inherit;
+  background: var(--bg);
+  border: 1px solid var(--phosphor-dim);
+  padding: 0 0.3rem;
+  font-size: 0.7rem;
+  color: var(--phosphor-bright);
+  margin: 0 0.05rem;
+}
+
+/* Start button */
+.start-btn {
+  font-family: inherit;
+  font-size: 1.05rem;
+  letter-spacing: 0.18em;
+  padding: 0.55rem 1.5rem;
+  background: transparent;
+  color: var(--phosphor-bright);
+  border: 1px solid var(--phosphor);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 0.9rem;
+}
+.start-btn:hover:not(:disabled) {
+  background: rgba(255, 176, 0, 0.13);
+  box-shadow: 0 0 12px rgba(255, 176, 0, 0.5);
+}
+.start-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Optional contextual key hint (HVC / Hotseat only) */
+.key-hint {
+  margin-top: 0.7rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--phosphor);
+  text-align: center;
+  max-width: 92%;
+  line-height: 1.7;
+}
+.kh-p1 { color: var(--p1); font-weight: 600; letter-spacing: 0.1em; }
+.kh-p2 { color: var(--p2); font-weight: 600; letter-spacing: 0.1em; }
+
+.shortcuts {
+  margin-top: 0.6rem;
+  font-size: 0.7rem;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
+ * Corner HUDs
+ * ============================================================ */
+
+.hud-corner {
+  position: absolute;
+  pointer-events: none;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  display: flex; flex-direction: column; gap: 0.35rem;
+  width: max-content;
+  max-width: 60%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid currentColor;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.hud-corner-tr { top: 0.5rem;    right: 0.5rem; align-items: flex-end;   color: var(--p1); }
+.hud-corner-bl { bottom: 0.5rem; left:  0.5rem; align-items: flex-start; color: var(--p2); }
+
+body[data-state="playing"]    .hud-corner,
+body[data-state="paused"]     .hud-corner,
+body[data-state="match-over"] .hud-corner {
+  opacity: 1;
+}
+
+.hud-tag {
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  color: currentColor;
+  opacity: 0.75;
+}
+
+.hud-row {
+  display: flex; align-items: center; gap: 0.5rem;
+}
+
+.hud-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  opacity: 0.7;
+}
+
+/* Bars — fixed width so FUEL aligns with WARP */
+.hud-bar {
+  position: relative;
+  width: var(--hud-content-w);
+  height: 5px;
+  border: 1px solid currentColor;
+  background: rgba(0, 0, 0, 0.6);
+}
+.hud-bar-thin {
+  height: 2px;
+  width: var(--hud-content-w);
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  visibility: hidden;
+  margin-bottom: 1px;
+}
+.hud-bar-thin.visible { visibility: visible; }
+.hud-bar-fill {
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  transform-origin: left center;
+  transform: scaleX(1);
+  transition: transform 0.08s linear;
+}
+.hud-corner-tr .hud-bar-fill { transform-origin: right center; }
+
+/* Icon rows */
+.hud-icons {
+  display: flex; gap: 1.5px; flex-wrap: wrap;
+}
+.hud-ammo {                                /* the 32-icon ammo strip */
+  max-width: 200px;
+}
+.hud-corner-tr .hud-ammo { justify-content: flex-end; }
+
+/* Warp icons sit inside a .hud-row — give the icon container the same width
+   as the fuel bar so the FUEL / WARP labels share a column. */
+.hud-row .hud-icons {
+  width: var(--hud-content-w);
+  flex-wrap: nowrap;
+}
+.hud-corner-tr .hud-row .hud-icons { justify-content: flex-end;   }
+.hud-corner-bl .hud-row .hud-icons { justify-content: flex-start; }
+
+.hud-tri {
+  width: 4px;
+  height: 7px;
+  background: currentColor;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  transition: opacity 0.1s;
+}
+.hud-tri.spent { opacity: 0.18; }
+
+.hud-dia {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  margin: 1px 2px;
+  border: 1px solid currentColor;
+  transform: rotate(45deg);
+  background: transparent;
+  --frac: 0;
+}
+.hud-dia.full { background: currentColor; }
+.hud-dia.partial::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: calc(var(--frac) * 100%);
+  background: currentColor;
+  opacity: 0.6;
+}
+.hud-dia.in-flight { border-style: dashed; }
+
+/* ============================================================
+ * Compact / responsive
+ * ============================================================ */
+
+@media (max-height: 540px) {
+  .app { padding: 0.25rem 0.4rem 0.4rem; }
+  .title-block h1 { font-size: clamp(1.3rem, 3.5vh, 1.9rem); }
+  .subhead { font-size: 0.5rem; margin-top: 0.05rem; }
+  .stage-frame { padding: 0.25rem 0; }
+}
+@media (max-width: 640px) {
+  :root { --hud-content-w: 96px; }
+  .control-bar { gap: 0.3rem 0.7rem; }
+  .seg-btn { padding: 0.28rem 0.5rem; font-size: 0.66rem; }
+  input[type=range] { width: 70px; }
+  .hud-corner { font-size: 0.55rem; padding: 0.35rem; }
+}
+@media (max-width: 480px) {
+  :root { --hud-content-w: 80px; }
+  .seg-btn { font-size: 0.62rem; padding: 0.25rem 0.4rem; }
+  input[type=range] { width: 56px; }
+  .ctl-mini input[type=range] { width: 40px; }
+}
