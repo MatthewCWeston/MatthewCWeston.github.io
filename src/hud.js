@@ -4,8 +4,8 @@ import {
 } from './constants.js';
 
 /**
- * Builds & updates the two HUD panels that sit in the top-right and bottom-left
- * corners of the stage (matching the corrected ship spawns).
+ * Builds & updates the two HUD panels that sit in the bottom-left (P0/orange)
+ * and top-right (P1/cyan) corners of the stage, matching the ship spawns.
  *
  *   ammo   → row of NUM_MISSILES triangle icons; spent ones go dim
  *   reload → thin progress bar (only visible while reloading)
@@ -16,13 +16,13 @@ import {
  */
 export class HUD {
   /**
-   * @param {HTMLElement} hudP1Root  - corner div for player 0 (cyan, upper-right)
-   * @param {HTMLElement} hudP2Root  - corner div for player 1 (orange, lower-left)
+   * @param {HTMLElement} hudP1Root  - corner div for player 0 (orange, lower-left)
+   * @param {HTMLElement} hudP2Root  - corner div for player 1 (cyan, upper-right)
    */
   constructor(hudP1Root, hudP2Root) {
     this.panels = [
-      this._buildPanel(hudP1Root, 'P1', 'CYAN'),
-      this._buildPanel(hudP2Root, 'P2', 'ORANGE'),
+      this._buildPanel(hudP1Root, 'P1', 'ORANGE'),
+      this._buildPanel(hudP2Root, 'P2', 'CYAN'),
     ];
   }
 
@@ -113,25 +113,23 @@ export class HUD {
     panel.fuelFill.style.transform = `scaleX(${ship.fuel / SHIP_FUEL})`;
     // Warp icons.
     //   - charges remaining → solid filled diamonds (count = ship.h_charges).
-    //   - if currently in flight or recharging → that icon shows partial fill.
+    //   - while recharging → the next-to-spend slot (the rightmost remaining
+    //     charge) shows partial fill; in-hyperspace gets the dashed border.
     //   - spent → hollow.
-    const recharging = ship.h_reload > 0;
-    let rechargeFrac = 0;
-    if (recharging) {
-      rechargeFrac = 1 - ship.h_reload / HYPERSPACE_RECHARGE;
-    }
+    const recharging   = ship.h_reload > 0;
+    const rechargeFrac = recharging ? 1 - ship.h_reload / HYPERSPACE_RECHARGE : 0;
+    const primingIdx   = (recharging && ship.h_charges > 0) ? ship.h_charges - 1 : -1;
     for (let i = 0; i < HYPERSPACE_CHARGES; i++) {
       const icon = panel.warpIcons[i];
       icon.classList.remove('full', 'partial', 'empty', 'in-flight');
-      if (i < ship.h_charges) {
-        icon.classList.add('full');
-      } else if (i === ship.h_charges && recharging) {
-        // The next-to-spend slot, currently regenerating.
+      if (i === primingIdx) {
         icon.classList.add('partial');
         if (ship.h_reload > HYPERSPACE_RECHARGE - HYPERSPACE_REENTRY) {
           icon.classList.add('in-flight');         // ship is OUT in hyperspace
         }
         icon.style.setProperty('--frac', rechargeFrac.toFixed(3));
+      } else if (i < ship.h_charges) {
+        icon.classList.add('full');
       } else {
         icon.classList.add('empty');
       }

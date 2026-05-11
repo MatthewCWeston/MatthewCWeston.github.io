@@ -25,6 +25,15 @@ export class Ship {
     this.h_reload = 0;
     this.angUV = [0, 0];
     this.updateAngUV();
+    // Warp-flash bookkeeping (UI-only, ignored by physics/obs).
+    this.warp_from     = null;
+    this.warp_to       = null;
+    this.warp_flash_at = 0;
+    this.warp_failed   = false;
+    // True once this ship has been destroyed.  Physics is skipped for dead
+    // ships so the remaining alive ship can keep playing during the
+    // post-termination grace window.
+    this.dead          = false;
   }
 
   updateAngUV() {
@@ -45,9 +54,13 @@ export class Ship {
         if (before > HYPERSPACE_RECHARGE - HYPERSPACE_REENTRY) {
           // Crossed the re-entry threshold this tick — stochastic exit.
           if (rng.uniform() > this.h_charges / HYPERSPACE_CHARGES) {
-            // Catastrophic failure: dropped at the star.
+            // Catastrophic failure: dropped at the star.  No warp_to /
+            // warp_flash_at write — the warp-flash render path skips
+            // warp-failed ships, and the atom/explosion at warp_from is the
+            // entire visual.
             this.pos = [0, 0];
             this.vel = [0, 0];
+            this.warp_failed = true;
             return;
           }
           this.pos = [rng.uniform() * WRAP_BOUND, rng.uniform() * WRAP_BOUND];
@@ -56,6 +69,8 @@ export class Ship {
           this.vel = [Math.cos(velAng) * speedMag, -Math.sin(velAng) * speedMag];
           this.ang = rng.uniform() * 360;
           this.updateAngUV();
+          this.warp_to       = [this.pos[0], this.pos[1]];
+          this.warp_flash_at = Date.now();
         }
       } else {
         return;       // still in hyperspace; skip the rest of the update
@@ -94,6 +109,7 @@ export class Ship {
     if (this.h_charges > 0 && this.h_reload === 0 && action[3] === 1) {
       this.h_reload = HYPERSPACE_RECHARGE;
       this.h_charges -= 1;
+      this.warp_from = [this.pos[0], this.pos[1]];
     }
     // Position update
     this.pos[0] += this.vel[0] * speed;

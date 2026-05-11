@@ -72,7 +72,7 @@ for (const btn of segButtons) {
   });
 }
 
-/* ---------- Sliders & toggles ---------- */
+/* ---------- Sliders ---------- */
 
 const speedSlider  = $('#speedSlider');
 const speedReadout = $('#speedReadout');
@@ -93,17 +93,6 @@ fpsSlider.addEventListener('input', () => {
 });
 fpsSlider.addEventListener('change', () => fpsSlider.blur());
 game.setFps(parseInt(fpsSlider.value, 10));
-
-const stochToggle = $('#stochasticToggle');
-stochToggle.addEventListener('change', () => {
-  game.setStochastic(stochToggle.checked);
-  stochToggle.blur();
-});
-const trailsToggle = $('#trailsToggle');
-trailsToggle.addEventListener('change', () => {
-  game.setTrails(trailsToggle.checked);
-  trailsToggle.blur();
-});
 
 /* ---------- Start button ---------- */
 

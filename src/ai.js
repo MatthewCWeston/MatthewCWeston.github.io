@@ -1,19 +1,8 @@
 import { ACTION_NVEC } from './constants.js';
 
-/** Greedy decode: argmax of each contiguous logit slice. */
-export function perAxisArgmax(logits, nvec) {
-  const out = [];
-  let p = 0;
-  for (const n of nvec) {
-    let bi = 0, bv = logits[p];
-    for (let i = 1; i < n; i++) if (logits[p + i] > bv) { bv = logits[p + i]; bi = i; }
-    out.push(bi);
-    p += n;
-  }
-  return out;
-}
-
-/** Gumbel-max sampling: equivalent to softmax sampling on each slice. */
+/** Gumbel-max sampling: equivalent to softmax sampling on each MultiDiscrete
+ *  slice.  The policy is PPO-trained against this distribution, so argmax
+ *  decoding would just produce a stale degenerate behavior — always sample. */
 export function perAxisSample(logits, nvec) {
   const out = [];
   let p = 0;
@@ -47,12 +36,10 @@ export class AIPlayer {
   }
 
   /** Returns [thrust, turn, shoot, hspace] for the given player. */
-  async getAction(env, playerIdx, stochastic) {
+  async getAction(env, playerIdx) {
     const feeds = env.getFeeds(playerIdx, this.ort);
     const out = await this.session.run(feeds);
     const logits = out.logits.data;       // length = sum(ACTION_NVEC) = 9
-    return stochastic
-      ? perAxisSample(logits, ACTION_NVEC)
-      : perAxisArgmax(logits, ACTION_NVEC);
+    return perAxisSample(logits, ACTION_NVEC);
   }
 }

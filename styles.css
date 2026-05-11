@@ -5,8 +5,8 @@
   --phosphor-dim:    #6a4a00;
   --phosphor-bright: #ffd060;
   --scan:            rgba(255, 176, 0, 0.04);
-  --p1:              #4ad8ff;
-  --p2:              #ff8a3d;
+  --p1:              #ff8a3d;
+  --p2:              #4ad8ff;
   --danger:          #ff4040;
   --ok:              #50ff80;
   /* Shared content width for the HUD bars and the warp icons row, so the
@@ -104,6 +104,21 @@ body::after {
   position: relative;
   background: #000;
   border: 1px solid var(--phosphor-dim);
+}
+/* CRT scanlines — overlaid on top of canvas + HUDs + overlays so the whole
+   stage shares the same line pattern. */
+.stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 0, 0, 0.32) 2px,
+    rgba(0, 0, 0, 0.32) 3px);
+  z-index: 5;
 }
 
 canvas {
@@ -228,54 +243,6 @@ input[type=range]::-moz-range-thumb {
   min-width: 1.2em;
 }
 
-/* Toggles */
-.toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-  color: var(--phosphor);
-  cursor: pointer;
-  user-select: none;
-}
-
-/* Custom checkbox — phosphor square that fills when checked. */
-input[type="checkbox"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  margin: 0;
-  border: 1px solid var(--phosphor-dim);
-  background: var(--bg-panel);
-  cursor: pointer;
-  position: relative;
-  flex-shrink: 0;
-  display: inline-block;
-  vertical-align: middle;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-}
-input[type="checkbox"]:hover { border-color: var(--phosphor); }
-input[type="checkbox"]:checked {
-  background: var(--phosphor);
-  border-color: var(--phosphor);
-  box-shadow: 0 0 6px rgba(255, 176, 0, 0.5);
-}
-input[type="checkbox"]:checked::after {
-  content: '';
-  position: absolute;
-  left: 3px; top: -1px;
-  width: 3px; height: 7px;
-  border: solid var(--bg);
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(45deg);
-}
-input[type="checkbox"]:focus-visible {
-  outline: 1px solid var(--phosphor-bright);
-  outline-offset: 1px;
-}
-
 /* ============================================================
  * Overlays — visibility driven by  body[data-state]
  * ============================================================ */
@@ -386,9 +353,14 @@ kbd {
   border: 1px solid currentColor;
   opacity: 0;
   transition: opacity 0.18s;
+  /* Phosphor glow — matches the canvas-side shadow blur. */
+  box-shadow:
+    0 0 10px 5px color-mix(in srgb, currentColor 35%, transparent),
+    inset 0 0 16px color-mix(in srgb, currentColor 8%,  transparent);
+  text-shadow: 0 0 5px color-mix(in srgb, currentColor 55%, transparent);
 }
-.hud-corner-tr { top: 0.5rem;    right: 0.5rem; align-items: flex-end;   color: var(--p1); }
-.hud-corner-bl { bottom: 0.5rem; left:  0.5rem; align-items: flex-start; color: var(--p2); }
+.hud-corner-tr { top: 0.5rem;    right: 0.5rem; align-items: flex-end;   color: var(--p2); }
+.hud-corner-bl { bottom: 0.5rem; left:  0.5rem; align-items: flex-start; color: var(--p1); }
 
 body[data-state="playing"]    .hud-corner,
 body[data-state="paused"]     .hud-corner,
@@ -420,6 +392,7 @@ body[data-state="match-over"] .hud-corner {
   height: 5px;
   border: 1px solid currentColor;
   background: rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 5px color-mix(in srgb, currentColor 35%, transparent);
 }
 .hud-bar-thin {
   height: 2px;
@@ -437,6 +410,7 @@ body[data-state="match-over"] .hud-corner {
   transform-origin: left center;
   transform: scaleX(1);
   transition: transform 0.08s linear;
+  box-shadow: 0 0 6px color-mix(in srgb, currentColor 55%, transparent);
 }
 .hud-corner-tr .hud-bar-fill { transform-origin: right center; }
 
@@ -450,22 +424,23 @@ body[data-state="match-over"] .hud-corner {
 .hud-corner-tr .hud-ammo { justify-content: flex-end; }
 
 /* Warp icons sit inside a .hud-row — give the icon container the same width
-   as the fuel bar so the FUEL / WARP labels share a column. */
+   as the fuel bar so the FUEL / WARP labels share a column, and spread the
+   diamonds across that full width so both HUD corners align identically. */
 .hud-row .hud-icons {
   width: var(--hud-content-w);
   flex-wrap: nowrap;
+  justify-content: space-between;
 }
-.hud-corner-tr .hud-row .hud-icons { justify-content: flex-end;   }
-.hud-corner-bl .hud-row .hud-icons { justify-content: flex-start; }
 
 .hud-tri {
   width: 4px;
   height: 7px;
   background: currentColor;
   clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  filter: drop-shadow(0 0 2px color-mix(in srgb, currentColor 65%, transparent));
   transition: opacity 0.1s;
 }
-.hud-tri.spent { opacity: 0.18; }
+.hud-tri.spent { opacity: 0.18; filter: none; }
 
 .hud-dia {
   position: relative;
@@ -477,7 +452,10 @@ body[data-state="match-over"] .hud-corner {
   background: transparent;
   --frac: 0;
 }
-.hud-dia.full { background: currentColor; }
+.hud-dia.full {
+  background: currentColor;
+  box-shadow: 0 0 4px color-mix(in srgb, currentColor 60%, transparent);
+}
 .hud-dia.partial::after {
   content: '';
   position: absolute;

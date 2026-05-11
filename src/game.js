@@ -25,12 +25,16 @@ export class Game {
     this.speed     = 5;                     // physics ticks per render frame
     this.fps       = 20;                    // render frames per second
     this.frameMs   = 1000 / this.fps;
-    this.stochastic = true;
 
     this.running   = false;
     this.paused    = false;
     this.loopId    = 0;
     this.currentActions = [[0,0,0,0],[0,0,0,0]];
+    // Wall-clock deadline for the post-termination grace window.  Set the
+    // first tick after env.terminated flips; _endMatch fires once we reach
+    // it.  `deathRemaining` carries the leftover ms across pause/resume.
+    this.deathEndsAt  = null;
+    this.deathRemaining = 0;
 
     this.listeners = listeners || {};       // { onStateChange(state) }
 
@@ -39,10 +43,8 @@ export class Game {
   }
 
   setMode(m)        { this.mode = m; }
-  setSpeed(n)       { this.speed = n; }
+  setSpeed(n)       { this.speed = n; this.renderer.frameTickSpeed = n; }
   setFps(n)         { this.fps = n; this.frameMs = 1000 / n; }
-  setStochastic(b)  { this.stochastic = b; }
-  setTrails(b)      { this.renderer.showTrails = b; }
 
   isAI(playerIdx) {
     if (this.mode === 'cvc')     return true;
@@ -67,7 +69,9 @@ export class Game {
     this.currentActions = [[0,0,0,0],[0,0,0,0]];
     this.running = true;
     this.paused  = false;
-    this.renderer.trails.length = 0;
+    this.deathEndsAt = null;
+    this.deathRemaining = 0;
+    this.renderer.reset();
     this.loopId++;
     this._emitState('playing');
     this.tick(this.loopId);
@@ -77,9 +81,18 @@ export class Game {
     if (!this.running) return;
     this.paused = !this.paused;
     if (this.paused) {
+      // Stash remaining death-window time so it survives the pause.
+      if (this.deathEndsAt) {
+        this.deathRemaining = Math.max(0, this.deathEndsAt - performance.now());
+        this.deathEndsAt = null;
+      }
       this.loopId++;
       this._emitState('paused');
     } else {
+      if (this.deathRemaining > 0) {
+        this.deathEndsAt = performance.now() + this.deathRemaining;
+        this.deathRemaining = 0;
+      }
       this.loopId++;
       this._emitState('playing');
       this.tick(this.loopId);
@@ -91,9 +104,11 @@ export class Game {
     if (!this.running) return;
     this.running = false;
     this.paused = false;
+    this.deathEndsAt = null;
+    this.deathRemaining = 0;
     this.loopId++;
     this.env.reset();
-    this.renderer.trails.length = 0;
+    this.renderer.reset();
     this.renderer.render(this.env);
     this.hud.update(this.env);
     this._emitState('ready');
@@ -101,10 +116,12 @@ export class Game {
 
   _endMatch() {
     this.running = false;
+    this.deathEndsAt = null;
+    this.deathRemaining = 0;
     const r0 = this.env.rewards[0];
     let outcome, sub;
-    if (r0 > 0)      { outcome = 'PLAYER 1 WINS'; sub = 'cyan victorious'; }
-    else if (r0 < 0) { outcome = 'PLAYER 2 WINS'; sub = 'orange victorious'; }
+    if (r0 > 0)      { outcome = 'PLAYER 1 WINS'; sub = 'orange victorious'; }
+    else if (r0 < 0) { outcome = 'PLAYER 2 WINS'; sub = 'cyan victorious'; }
     else             { outcome = 'TIME OUT';      sub = 'no contact made'; }
     this.renderer.render(this.env);          // lock in win/loss colors
     this.hud.update(this.env);
@@ -120,8 +137,7 @@ export class Game {
     for (let i = 0; i < 2; i++) {
       if (this.isAI(i)) {
         try {
-          this.currentActions[i] =
-            await this.ai.getAction(this.env, i, this.stochastic);
+          this.currentActions[i] = await this.ai.getAction(this.env, i);
         } catch (err) {
           console.error('Inference failed:', err);
           this.currentActions[i] = [0, 0, 0, 0];
@@ -132,17 +148,29 @@ export class Game {
       }
     }
 
-    // 2) Run physics `speed` times with the same action.
+    // 2) Run physics `speed` times.  We *don't* break on termination —
+    //    the alive ship keeps playing through the post-termination grace
+    //    window so the world doesn't freeze while the death-anim plays.
+    //    env.update skips dead ships and locks the rewards on first kill.
     for (let s = 0; s < this.speed; s++) {
       this.env.update(this.currentActions);
-      if (this.env.terminated || this.env.time >= this.env.maxTime) break;
     }
 
-    // 3) Render + HUD.
+    // 3) On the first frame the env is terminated (or the time-out hits),
+    //    start the grace-window timer.  Longer if a Minskytron atom is
+    //    playing — that animation needs room to develop.
+    if (!this.deathEndsAt &&
+        (this.env.terminated || this.env.time >= this.env.maxTime)) {
+      const warpFailed = this.env.playerShips.some(s => s.warp_failed);
+      this.deathEndsAt = now + (warpFailed ? 1800 : 700);
+    }
+
+    // 4) Render + HUD.
     this.renderer.render(this.env);
     this.hud.update(this.env);
 
-    if (this.env.terminated || this.env.time >= this.env.maxTime) {
+    // 5) End the match once the grace window expires.
+    if (this.deathEndsAt && performance.now() >= this.deathEndsAt) {
       this._endMatch();
       return;
     }

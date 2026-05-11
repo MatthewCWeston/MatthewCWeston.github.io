@@ -37,15 +37,6 @@
         <input type="range" id="fpsSlider" min="10" max="60" step="5" value="20">
         <span class="readout" id="fpsReadout">20</span>
       </div>
-
-      <label class="toggle-label">
-        <input type="checkbox" id="stochasticToggle" checked>
-        <span>AI sampling</span>
-      </label>
-      <label class="toggle-label">
-        <input type="checkbox" id="trailsToggle">
-        <span>trails</span>
-      </label>
     </div>
   </header>
 
@@ -53,8 +44,8 @@
     <div class="stage">
       <canvas id="game"></canvas>
 
-      <div class="hud-corner hud-corner-tr" id="hudP1"></div>
-      <div class="hud-corner hud-corner-bl" id="hudP2"></div>
+      <div class="hud-corner hud-corner-bl" id="hudP1"></div>
+      <div class="hud-corner hud-corner-tr" id="hudP2"></div>
 
       <div class="overlay overlay-loading">
         <div class="big-msg" id="loadingMsg">LOADING MODEL...</div>
