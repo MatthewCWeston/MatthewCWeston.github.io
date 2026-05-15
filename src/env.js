@@ -6,10 +6,6 @@ import { encodeRepeated } from './math.js';
 import { Ship } from './ship.js';
 import { Missile } from './missile.js';
 
-class RNG {
-  uniform() { return Math.random(); }
-}
-
 const FRAG_LIFE        = 80;        // physics ticks
 const FRAG_KICK_MIN    = 0.0014;
 const FRAG_KICK_MAX    = 0.0040;
@@ -89,7 +85,6 @@ export class SpaceWarEnv {
   constructor() {
     this.maxTime  = DEFAULT_MAX_TIME;
     this.speed    = 1;            // env.self_speed; always 1 (frame-skip lives in Game)
-    this.rng      = new RNG();
     this.reset();
   }
 
@@ -115,7 +110,7 @@ export class SpaceWarEnv {
     for (let i = 0; i < 2; i++) {
       const ship = this.playerShips[i];
       if (ship.dead) continue;                       // physics frozen for the dead
-      ship.update(actions[i], this.missiles[i], this.speed, this.rng);
+      ship.update(actions[i], this.missiles[i], this.speed);
       if (Math.hypot(ship.pos[0], ship.pos[1]) < PLAYER_SIZE) {
         ship.dead = true;
         // Pick where the ship visually explodes.  For a warp failure the
@@ -202,10 +197,10 @@ export class SpaceWarEnv {
       let dx, dy;
       if (len > 1e-9) { dx = wcx / len; dy = wcy / len; }
       else {
-        const t = this.rng.uniform() * Math.PI * 2;
+        const t = Math.random() * Math.PI * 2;
         dx = Math.cos(t); dy = Math.sin(t);
       }
-      const kick = FRAG_KICK_MIN + this.rng.uniform() * (FRAG_KICK_MAX - FRAG_KICK_MIN);
+      const kick = FRAG_KICK_MIN + Math.random() * (FRAG_KICK_MAX - FRAG_KICK_MIN);
       const vel  = [ ship.vel[0] + dx * kick, ship.vel[1] + dy * kick ];
       if (missileVel) {
         vel[0] += missileVel[0] * FRAG_MISSILE_BIAS;
@@ -220,10 +215,10 @@ export class SpaceWarEnv {
         pos,
         vel,
         ship.ang,                                  // start matching the ship
-        (this.rng.uniform() * 2 - 1) * FRAG_ANGVEL,
+        (Math.random() * 2 - 1) * FRAG_ANGVEL,
         idx,
         localVerts,
-        FRAG_LIFE * (0.75 + this.rng.uniform() * 0.5),
+        FRAG_LIFE * (0.75 + Math.random() * 0.5),
       ));
     }
   }

@@ -46,14 +46,14 @@ export class Ship {
    * Order: hyperspace handling → thrust → turn → shoot → hspace entry →
    *        position update → vel clip → wrap → gravity.
    */
-  update(action, missiles, speed, rng) {
+  update(action, missiles, speed) {
     if (this.h_reload > 0) {
       const before = this.h_reload;
       this.h_reload = Math.max(this.h_reload - speed, 0);
       if (this.h_reload <= HYPERSPACE_RECHARGE - HYPERSPACE_REENTRY) {
         if (before > HYPERSPACE_RECHARGE - HYPERSPACE_REENTRY) {
           // Crossed the re-entry threshold this tick — stochastic exit.
-          if (rng.uniform() > this.h_charges / HYPERSPACE_CHARGES) {
+          if (Math.random() > this.h_charges / HYPERSPACE_CHARGES) {
             // Catastrophic failure: dropped at the star.  No warp_to /
             // warp_flash_at write — the warp-flash render path skips
             // warp-failed ships, and the atom/explosion at warp_from is the
@@ -63,11 +63,11 @@ export class Ship {
             this.warp_failed = true;
             return;
           }
-          this.pos = [rng.uniform() * WRAP_BOUND, rng.uniform() * WRAP_BOUND];
-          const velAng = rng.uniform() * 2 * Math.PI;
-          const speedMag = rng.uniform() * S_HSPACE_MAXSPEED;
+          this.pos = [(Math.random() * 2 - 1) * WRAP_BOUND, (Math.random() * 2 - 1) * WRAP_BOUND];
+          const velAng = Math.random() * 2 * Math.PI;
+          const speedMag = Math.random() * S_HSPACE_MAXSPEED;
           this.vel = [Math.cos(velAng) * speedMag, -Math.sin(velAng) * speedMag];
-          this.ang = rng.uniform() * 360;
+          this.ang = Math.random() * 360;
           this.updateAngUV();
           this.warp_to       = [this.pos[0], this.pos[1]];
           this.warp_flash_at = Date.now();
